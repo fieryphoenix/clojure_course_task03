@@ -204,6 +204,30 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TBD: Implement the following macros
 ;;
+(defn lower-symbol [& args]
+  (symbol (.toLowerCase (reduce str args))))
+
+;; create vector [[table-name [colums]] [...]]
+(defn table-map [tables]
+  (loop [t-map []
+         rem-table tables]
+    (do
+      (if (empty? rem-table)
+        t-map
+      (recur 
+       (conj t-map (vector (symbol (first rem-table)) (into [] (map #(keyword %) (nth rem-table 2))))) 
+       (drop 3 rem-table))))))
+
+
+;; create new variables for group macro
+(defmacro def-group-var [name table-name t-fields]
+  `(do (def ~(lower-symbol "-" name "-" table-name "-fields") ~t-fields)))
+
+;;create new functions
+(defmacro create-select-func [name table-name t-fields]
+  `(defn ~(lower-symbol "select-" name "-" table-name) [] 
+     (let [~(lower-symbol table-name "-fields-var") ~t-fields] 
+       (select ~table-name (~'fields ~@t-fields)))))
 
 (defmacro group [name & body]
   ;; Пример
@@ -216,56 +240,16 @@
   ;; 3) Создает следующие функции
   ;;    (select-agent-proposal) ;; select person, phone, address, price from proposal;
   ;;    (select-agent-agents)  ;; select clients_id, proposal_id, agent from agents;
-  (conj []
-    `(group-vars ~name ~@body)
-    `(group-select ~name ~@body)))
+  `(do  
+    ~@(for [row# (table-map body)]
+        (conj [] 
+          `(do (create-select-func ~name ~(first row#) ~(second row#)))
+          `(do (def-group-var ~name ~(first row#) ~(second row#)))))))
 
-(defmacro group-vars [name & body]
-   (eval `(do
-      (let [bList# (table-map '(~@body))]
-        (cons `do
-        (for [next-var# bList#]
-          (defn-group-var (generate-group-name '~name (first next-var#)) (second next-var#))))))))
-
-(defmacro group-select [name & body]
-   (eval
-    `(do
-      (let [bList# (table-map '(~@body))]
-        (cons `do
-        (for [fnc# bList#]
-          (defn-select-func (generate-select-fnc-name '~name (first fnc#)) '[] '(println `fnc#))))))))
-
-(macroexpand '(group  Agent prop -> [number] age -> [b d s]))
-(group Agent prop -> [number] age3 -> [b d s])
-(println -agent-prop-fields)
-(def -agent-age-vars nil)
-(select-agent-age3)
-
-;;generate names for group macro
-(defn generate-group-name [name table-name]
-  (.toLowerCase (str "-" name "-" table-name "-fields")))
-(defn generate-select-fnc-name [name table-name]
-  (.toLowerCase (str "select-" name "-" table-name)))
-
-;; create vector [[table-name [colums]] [...]]
-(defn table-map [tables]
-  (loop [t-map []
-         rem-table tables]
-    (do
-      (if (empty? rem-table)
-        t-map
-      (recur 
-       (conj t-map (vector (symbol (first rem-table)) (map #(keyword %) (nth rem-table 2)))) 
-       (drop 3 rem-table))))))
-
-;;create new functions
-(defn defn-select-func [fnc-name args & body]
-  `(defn ~(symbol fnc-name) ~args ~@body))
-
-;; create new variables for group macro
-(defn defn-group-var [varName varFields]
-  `(def ~(symbol varName) '~varFields))
-
+(macroexpand-1 '(group Agent prop -> [number] age -> [b d s]))
+(group Agent prop -> [number4] age -> [b4 d4 s4])
+(select-agent-prop)
+(println -agent-age-fields)
 
 (defmacro user [name & body]
   ;; Пример
