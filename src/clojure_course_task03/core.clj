@@ -246,10 +246,11 @@
           `(do (create-select-func ~name ~(first row#) ~(second row#)))
           `(do (def-group-var ~name ~(first row#) ~(second row#)))))))
 
-(macroexpand-1 '(group Agent prop -> [number] age -> [b d s]))
-(group Agent prop -> [number4] age -> [b4 d4 s4])
-(select-agent-prop)
-(println -agent-age-fields)
+(defn find-ns-vars [group-name]
+  (->>
+   (ns-publics *ns*)
+   (map first  )
+   (filter #(.startsWith (str %1) (str "-" (.toLowerCase group-name))))))
 
 (defmacro user [name & body]
   ;; Пример
@@ -257,10 +258,15 @@
   ;;     (belongs-to Agent))
   ;; Создает переменные Ivanov-proposal-fields-var = [:person, :phone, :address, :price]
   ;; и Ivanov-agents-fields-var = [:clients_id, :proposal_id, :agent]
-  )
+`(do 
+     ~@(for [group# (map #(.toLowerCase (str %)) (rest (first body)))
+             group-var# (find-ns-vars group#)
+             :let [user-var# (.replaceFirst (str name group-var# "-var") (str "-" group#) "")]]
+         `(do (def ~(lower-symbol user-var#) ~group-var#)))))
 
-(defmacro with-user [name & body]
-  ;; Пример
+
+(defmacro with-user [user [_ table-name _ :as body]]
+ ;; Пример
   ;; (with-user Ivanov
   ;;   . . .)
   ;; 1) Находит все переменные, начинающиеся со слова Ivanov, в *user-tables-vars*
@@ -269,4 +275,8 @@
   ;;    proposal-fields-var и agents-fields-var.
   ;;    Таким образом, функция select, вызванная внутри with-user, получает
   ;;    доступ ко всем необходимым переменным вида <table-name>-fields-var.
-  )
+  `(let [~(lower-symbol  table-name "-fields-var") 
+         ~(lower-symbol user "-" table-name "-fields-var")]
+     ~body))
+
+
